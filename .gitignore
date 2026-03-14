@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Environment files (contain secrets)
+.env.local
+.env.*.local
+.env
+
+# Build output
+dist/
+build/
+
+# Editor
+.DS_Store
+*.swp
+*.swo
