@@ -1,252 +1,338 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { Plus, Trash2, ChevronDown, ChevronUp, IndianRupee } from 'lucide-react'
+import { Plus, Trash2, IndianRupee } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EventBadge from '../components/EventBadge'
 
 function formatINR(amount) {
-  return '₹' + Number(amount).toLocaleString('en-IN')
+  return '₹' + Number(amount || 0).toLocaleString('en-IN')
 }
+
+const emptyExpense = { name: '', amount: '', event_id: '', paid_by: '', comment: '' }
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState([])
   const [events, setEvents] = useState([])
   const [familyMembers, setFamilyMembers] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [newExpense, setNewExpense] = useState(emptyExpense)
   const [budgetInputs, setBudgetInputs] = useState({})
-  const [newExpense, setNewExpense] = useState({ name: '', amount: '', event_id: '', paid_by: '', comment: '' })
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     fetchData()
   }, [])
 
   async function fetchData() {
-    setLoading(true)
     const [expRes, evRes, memRes] = await Promise.all([
-      supabase.from('expenses').select('*, events(*), family_members(*)').order('created_at', { ascending: false }),
+      supabase.from('expenses').select('*, events(*), family_members(*)'),
       supabase.from('events').select('*').order('created_at'),
       supabase.from('family_members').select('*').order('name'),
     ])
-    if (expRes.error) toast.error('Failed to load expenses')
-    else setExpenses(expRes.data || [])
-    if (evRes.error) toast.error('Failed to load events')
-    else {
-      setEvents(evRes.data || [])
+    if (expRes.error) {
+      toast.error('Failed to load expenses')
+    } else {
+      setExpenses(expRes.data || [])
+    }
+    if (evRes.error) {
+      toast.error('Failed to load events')
+    } else {
+      const evData = evRes.data || []
+      setEvents(evData)
       const inputs = {}
-      ;(evRes.data || []).forEach(e => { inputs[e.id] = e.budget })
+      evData.forEach(e => {
+        inputs[e.id] = e.budget ?? 0
+      })
       setBudgetInputs(inputs)
     }
-    if (memRes.error) toast.error('Failed to load family members')
-    else setFamilyMembers(memRes.data || [])
-    setLoading(false)
+    if (memRes.error) {
+      toast.error('Failed to load family members')
+    } else {
+      setFamilyMembers(memRes.data || [])
+    }
   }
 
-  async function submitExpense() {
-    if (!newExpense.name.trim()) return toast.error('Expense name is required')
-    if (!newExpense.amount || isNaN(Number(newExpense.amount))) return toast.error('Valid amount is required')
-    if (!newExpense.event_id) return toast.error('Please select an event')
-    if (!newExpense.paid_by) return toast.error('Please select who paid')
-
+  async function handleAddExpense(e) {
+    e.preventDefault()
+    if (!newExpense.name.trim()) {
+      toast.error('Expense name is required')
+      return
+    }
+    if (!newExpense.amount || isNaN(Number(newExpense.amount))) {
+      toast.error('A valid amount is required')
+      return
+    }
+    if (!newExpense.event_id) {
+      toast.error('Please select an event')
+      return
+    }
+    setSubmitting(true)
     const { error } = await supabase.from('expenses').insert({
       name: newExpense.name.trim(),
       amount: Number(newExpense.amount),
       event_id: newExpense.event_id,
-      paid_by: newExpense.paid_by,
+      paid_by: newExpense.paid_by || null,
       comment: newExpense.comment.trim() || null,
     })
-    if (error) return toast.error(error.message)
+    setSubmitting(false)
+    if (error) {
+      toast.error('Failed to add expense')
+      return
+    }
     toast.success('Expense added!')
-    setNewExpense({ name: '', amount: '', event_id: '', paid_by: '', comment: '' })
+    setNewExpense(emptyExpense)
     setShowAddForm(false)
     fetchData()
   }
 
   async function deleteExpense(id) {
     const { error } = await supabase.from('expenses').delete().eq('id', id)
-    if (error) return toast.error(error.message)
+    if (error) {
+      toast.error('Failed to delete expense')
+      return
+    }
     toast.success('Expense deleted')
-    fetchData()
+    setExpenses(prev => prev.filter(ex => ex.id !== id))
   }
 
   async function saveBudget(eventId) {
     const budget = Number(budgetInputs[eventId] || 0)
     const { error } = await supabase.from('events').update({ budget }).eq('id', eventId)
-    if (error) toast.error(error.message)
-    else toast.success('Budget saved')
-    fetchData()
+    if (error) {
+      toast.error('Failed to save budget')
+    } else {
+      toast.success('Budget saved')
+    }
   }
+
+  const pillBase =
+    'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none'
+  const pillActive = 'bg-primary text-white border-primary'
+  const pillInactive = 'bg-white text-wtext border-border hover:border-primary/50'
+
+  const inputClass =
+    'w-full px-3 py-2 rounded-lg border border-border bg-cream text-wtext text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary'
 
   // Group expenses by event
-  const byEvent = events.map(event => ({
-    event,
-    items: expenses.filter(e => e.event_id === event.id),
-  })).filter(g => g.items.length > 0)
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-cream flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  const byEvent = events
+    .map(event => ({
+      event,
+      items: expenses.filter(ex => ex.event_id === event.id),
+    }))
+    .filter(g => g.items.length > 0)
 
   return (
-    <div className="min-h-screen bg-cream">
-      {/* Header */}
-      <div className="bg-primary text-white px-4 py-4">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
-          <h1 className="font-heading text-2xl">Shaadi Brain</h1>
+    <div className="min-h-screen bg-cream font-body">
+      {/* Fixed top header */}
+      <header className="fixed top-0 left-0 right-0 z-30 bg-primary text-white shadow-md">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-center">
+          <span className="font-heading text-xl font-bold tracking-wide">Shaadi Brain</span>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-4 pt-20 pb-28">
+        {/* Page title row */}
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="font-heading text-2xl font-bold text-wtext">Expenses</h1>
           <button
             data-testid="add-expense-toggle-btn"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+            onClick={() => setShowAddForm(v => !v)}
+            className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center shadow hover:bg-primary/90 transition-colors"
+            aria-label="Toggle add expense form"
           >
             <Plus size={20} />
           </button>
         </div>
-      </div>
 
-      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
-        <h2 className="font-heading text-2xl text-wtext">Expenses</h2>
-
-        {/* ── Add Expense Form ─────────────────── */}
+        {/* Add Expense Form */}
         <AnimatePresence>
           {showAddForm && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
+              key="add-expense-form"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.22 }}
+              className="mb-6"
             >
-              <div className="bg-white rounded-3xl shadow-sm border border-border p-5 space-y-4">
-                <h3 className="font-heading text-lg text-wtext">Add Expense</h3>
-
-                {/* Event pills */}
-                <div>
-                  <label className="text-xs font-medium text-muted uppercase tracking-wide mb-2 block">Event</label>
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                    {events.map(ev => (
-                      <button
-                        key={ev.id}
-                        onClick={() => setNewExpense(p => ({ ...p, event_id: ev.id }))}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                          newExpense.event_id === ev.id
-                            ? 'text-white border-transparent'
-                            : 'border-border text-wtext bg-white hover:border-primary/50'
-                        }`}
-                        style={newExpense.event_id === ev.id ? { backgroundColor: ev.color, borderColor: ev.color } : {}}
-                      >
-                        {ev.name}
-                      </button>
-                    ))}
+              <div className="bg-white rounded-2xl shadow-sm border border-border p-5">
+                <h2 className="font-heading text-lg font-bold text-wtext mb-4">Add Expense</h2>
+                <form onSubmit={handleAddExpense} className="space-y-4">
+                  {/* Event pills (required) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted mb-1 uppercase tracking-wide">
+                      Event <span className="text-primary">*</span>
+                    </label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                      {events.map(ev => (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() =>
+                            setNewExpense(p => ({
+                              ...p,
+                              event_id: p.event_id === ev.id ? '' : ev.id,
+                            }))
+                          }
+                          className={`${pillBase} ${newExpense.event_id === ev.id ? pillActive : pillInactive}`}
+                          style={
+                            newExpense.event_id === ev.id
+                              ? {}
+                              : { borderColor: (ev.color || '#E2D8D0') + '80', color: ev.color }
+                          }
+                        >
+                          {ev.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Name */}
-                <div>
-                  <label className="text-xs font-medium text-muted uppercase tracking-wide mb-1 block">Expense Name</label>
-                  <input
-                    className="input-field"
-                    placeholder="e.g., Venue booking"
-                    value={newExpense.name}
-                    onChange={e => setNewExpense(p => ({ ...p, name: e.target.value }))}
-                  />
-                </div>
-
-                {/* Amount */}
-                <div>
-                  <label className="text-xs font-medium text-muted uppercase tracking-wide mb-1 block">Amount (₹)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted font-medium">₹</span>
+                  {/* Expense Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted mb-1 uppercase tracking-wide">
+                      Expense Name
+                    </label>
                     <input
-                      className="input-field pl-8"
-                      type="number"
-                      placeholder="0"
-                      value={newExpense.amount}
-                      onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))}
+                      type="text"
+                      value={newExpense.name}
+                      onChange={e => setNewExpense(p => ({ ...p, name: e.target.value }))}
+                      placeholder="e.g., Venue booking"
+                      className={inputClass}
                     />
                   </div>
-                </div>
 
-                {/* Paid By */}
-                <div>
-                  <label className="text-xs font-medium text-muted uppercase tracking-wide mb-2 block">Paid By</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {familyMembers.map(m => (
-                      <button
-                        key={m.id}
-                        onClick={() => setNewExpense(p => ({ ...p, paid_by: m.id }))}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                          newExpense.paid_by === m.id
-                            ? 'bg-primary text-white border-primary'
-                            : 'border-border text-wtext bg-white hover:border-primary/50'
-                        }`}
-                      >
-                        {m.name}
-                      </button>
-                    ))}
+                  {/* Amount */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted mb-1 uppercase tracking-wide">
+                      Amount
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm font-medium select-none">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={newExpense.amount}
+                        onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))}
+                        placeholder="0"
+                        className={`${inputClass} pl-7`}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {/* Comment */}
-                <div>
-                  <label className="text-xs font-medium text-muted uppercase tracking-wide mb-1 block">Comment (Optional)</label>
-                  <textarea
-                    className="input-field resize-none"
-                    rows={2}
-                    placeholder="Add any notes..."
-                    value={newExpense.comment}
-                    onChange={e => setNewExpense(p => ({ ...p, comment: e.target.value }))}
-                  />
-                </div>
+                  {/* Paid By */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted mb-1 uppercase tracking-wide">
+                      Paid By
+                    </label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                      <button
+                        type="button"
+                        onClick={() => setNewExpense(p => ({ ...p, paid_by: '' }))}
+                        className={`${pillBase} ${!newExpense.paid_by ? pillActive : pillInactive}`}
+                      >
+                        No One
+                      </button>
+                      {familyMembers.map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() =>
+                            setNewExpense(p => ({
+                              ...p,
+                              paid_by: p.paid_by === m.id ? '' : m.id,
+                            }))
+                          }
+                          className={`${pillBase} ${newExpense.paid_by === m.id ? pillActive : pillInactive}`}
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                <button data-testid="submit-expense-btn" onClick={submitExpense} className="btn-primary">
-                  Add Expense
-                </button>
+                  {/* Comment */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted mb-1 uppercase tracking-wide">
+                      Comment (optional)
+                    </label>
+                    <textarea
+                      value={newExpense.comment}
+                      onChange={e => setNewExpense(p => ({ ...p, comment: e.target.value }))}
+                      placeholder="Any notes..."
+                      rows={2}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </div>
+
+                  <button
+                    data-testid="submit-expense-btn"
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-60"
+                  >
+                    {submitting ? 'Adding…' : 'Add Expense'}
+                  </button>
+                </form>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── Set Event Budgets ─────────────────── */}
-        <div className="bg-white rounded-3xl shadow-sm border border-border p-5">
-          <h3 className="font-heading text-lg text-wtext mb-4">Set Event Budgets</h3>
+        {/* Set Event Budgets */}
+        <div className="bg-white rounded-2xl shadow-sm border border-border p-5 mb-6">
+          <h2 className="font-heading text-lg font-bold text-wtext mb-4">Set Event Budgets</h2>
           <div className="space-y-3">
             {events.map(event => (
               <div key={event.id} className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: event.color }} />
-                <span className="text-sm font-medium text-wtext w-24 flex-shrink-0">{event.name}</span>
+                <div
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: event.color || '#C05621' }}
+                />
+                <span className="text-sm font-medium text-wtext flex-shrink-0 w-28 truncate">
+                  {event.name}
+                </span>
                 <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">₹</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm font-medium select-none">
+                    ₹
+                  </span>
                   <input
-                    className="w-full border border-border rounded-full px-3 pl-7 py-2 text-sm text-wtext bg-paper focus:outline-none focus:border-primary transition-colors"
                     type="number"
+                    min="0"
+                    step="any"
                     value={budgetInputs[event.id] ?? 0}
-                    onChange={e => setBudgetInputs(p => ({ ...p, [event.id]: e.target.value }))}
+                    onChange={e =>
+                      setBudgetInputs(prev => ({ ...prev, [event.id]: e.target.value }))
+                    }
                     onBlur={() => saveBudget(event.id)}
+                    className="w-full border border-border rounded-lg px-3 pl-7 py-2 text-sm text-wtext bg-cream focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                   />
                 </div>
               </div>
             ))}
+            {events.length === 0 && (
+              <p className="text-sm text-muted italic">No events found.</p>
+            )}
           </div>
         </div>
 
-        {/* ── Expenses by Event ─────────────────── */}
+        {/* Expenses by Event */}
         <div>
-          <h3 className="font-heading text-xl text-wtext mb-3">Expenses by Event</h3>
+          <h2 className="font-heading text-xl font-bold text-wtext mb-4">Expenses by Event</h2>
           {byEvent.length === 0 ? (
-            <div className="text-center py-10 text-muted">
-              <IndianRupee size={32} className="mx-auto mb-2 opacity-30" />
-              <p>No expenses yet. Add your first expense!</p>
+            <div className="flex flex-col items-center justify-center py-12 text-muted">
+              <IndianRupee size={36} className="mb-3 opacity-30" />
+              <p className="text-sm italic">No expenses yet. Add your first one!</p>
             </div>
           ) : (
             <div className="space-y-4">
               {byEvent.map(({ event, items }) => {
-                const total = items.reduce((s, e) => s + Number(e.amount), 0)
+                const total = items.reduce((sum, ex) => sum + Number(ex.amount || 0), 0)
                 return (
-                  <EventGroup
+                  <EventExpenseGroup
                     key={event.id}
                     event={event}
                     items={items}
@@ -258,67 +344,59 @@ export default function ExpensesPage() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   )
 }
 
-function EventGroup({ event, items, total, onDelete }) {
-  const [collapsed, setCollapsed] = useState(false)
-
+function EventExpenseGroup({ event, items, total, onDelete }) {
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden">
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-5 pt-4 pb-3"
-      >
+    <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
+      {/* Group header */}
+      <div className="px-5 py-3.5 border-b border-border">
         <EventBadge event={event} size="md" />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">{items.length} items</span>
-          {collapsed ? <ChevronDown size={16} className="text-muted" /> : <ChevronUp size={16} className="text-muted" />}
-        </div>
-      </button>
+      </div>
 
-      <AnimatePresence initial={false}>
-        {!collapsed && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
+      {/* Expense rows */}
+      <ul className="divide-y divide-border">
+        {items.map(expense => (
+          <li
+            key={expense.id}
+            data-testid={`expense-item-${expense.id}`}
+            className="flex items-center justify-between px-5 py-3 gap-3"
           >
-            <div className="px-5 pb-4 space-y-1 divide-y divide-border/50">
-              {items.map(expense => (
-                <div
-                  key={expense.id}
-                  data-testid={`expense-item-${expense.id}`}
-                  className="flex items-center justify-between py-3"
-                >
-                  <div>
-                    <p className="font-medium text-wtext text-sm">{expense.name}</p>
-                    <p className="text-primary font-bold">{formatINR(expense.amount)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-wtext bg-paper border border-border rounded-full px-3 py-1">
-                      {expense.family_members?.name || '—'}
-                    </span>
-                    <button
-                      onClick={() => onDelete(expense.id)}
-                      className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-50 transition-colors"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div className="flex items-center justify-between pt-3">
-                <span className="text-sm font-semibold text-wtext">Event Total</span>
-                <span className="font-bold text-wtext">{formatINR(total)}</span>
-              </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-wtext truncate">{expense.name}</p>
+              <p className="text-sm font-bold text-primary mt-0.5">
+                {formatINR(expense.amount)}
+              </p>
+              {expense.comment && (
+                <p className="text-xs text-muted mt-0.5 truncate">{expense.comment}</p>
+              )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {expense.family_members && (
+                <span className="text-xs font-medium text-wtext bg-cream border border-border rounded-full px-2.5 py-1">
+                  {expense.family_members.name}
+                </span>
+              )}
+              <button
+                onClick={() => onDelete(expense.id)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                aria-label="Delete expense"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {/* Event Total row */}
+      <div className="flex items-center justify-between px-5 py-3 bg-cream/60 border-t border-border">
+        <span className="text-sm font-semibold text-wtext">Event Total</span>
+        <span className="text-sm font-bold text-wtext">{formatINR(total)}</span>
+      </div>
     </div>
   )
 }
