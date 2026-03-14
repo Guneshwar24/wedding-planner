@@ -24,7 +24,7 @@ export default function ExpensesPage() {
     Promise.all([
       client.get('/api/expenses'),
       client.get('/api/events'),
-      client.get('/api/family'),
+      client.get('/api/family-members'),
     ])
       .then(([ex, ev, fam]) => {
         setExpenses(ex.data)
@@ -71,7 +71,7 @@ export default function ExpensesPage() {
 
   async function saveBudget(eventId) {
     try {
-      const res = await client.patch(`/api/events/${eventId}/budget`, {
+      const res = await client.put(`/api/events/${eventId}`, {
         budget: parseFloat(budgetValues[eventId]) || 0
       })
       setEvents(prev => prev.map(e => e.id === eventId ? { ...e, budget: res.data.budget } : e))

@@ -38,14 +38,14 @@ export default function TasksPage() {
   const [collapsed, setCollapsed] = useState({})
 
   const [form, setForm] = useState({
-    name: '', event_id: '', assignee_id: '', deadline: '', notes: ''
+    name: '', event_id: '', assigned_to: '', deadline: '', notes: ''
   })
 
   useEffect(() => {
     Promise.all([
       client.get('/api/tasks'),
       client.get('/api/events'),
-      client.get('/api/family'),
+      client.get('/api/family-members'),
     ])
       .then(([t, e, f]) => {
         setTasks(t.data)
@@ -63,14 +63,14 @@ export default function TasksPage() {
       const payload = {
         name: form.name,
         event_id: form.event_id || null,
-        assignee_id: form.assignee_id || null,
+        assigned_to: form.assigned_to || null,
         deadline: form.deadline || null,
         notes: form.notes || null,
         status: 'pending',
       }
       const res = await client.post('/api/tasks', payload)
       setTasks(prev => [...prev, res.data])
-      setForm({ name: '', event_id: '', assignee_id: '', deadline: '', notes: '' })
+      setForm({ name: '', event_id: '', assigned_to: '', deadline: '', notes: '' })
       setShowForm(false)
       toast.success('Task added!')
     } catch {
@@ -81,7 +81,7 @@ export default function TasksPage() {
   async function changeStatus(task) {
     const newStatus = nextStatus(task.status)
     try {
-      const res = await client.patch(`/api/tasks/${task.id}`, { status: newStatus })
+      const res = await client.put(`/api/tasks/${task.id}`, { status: newStatus })
       setTasks(prev => prev.map(t => t.id === task.id ? res.data : t))
     } catch {
       toast.error('Failed to update status')
@@ -100,7 +100,7 @@ export default function TasksPage() {
 
   const filtered = tasks.filter(t => {
     if (filterEvent && t.event_id !== filterEvent) return false
-    if (filterPerson && t.assignee_id !== filterPerson) return false
+    if (filterPerson && t.assigned_to !== filterPerson) return false
     return true
   })
 
@@ -192,8 +192,8 @@ export default function TasksPage() {
                   <div>
                     <label className="block text-xs font-medium mb-1" style={{ color: '#4A3A35' }}>Assignee</label>
                     <select
-                      value={form.assignee_id}
-                      onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))}
+                      value={form.assigned_to}
+                      onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
                       className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
                       style={{ borderColor: '#E2D8D0', color: '#4A3A35', background: '#FFFFFF' }}
                     >
@@ -359,10 +359,10 @@ export default function TasksPage() {
                               <p className="font-medium text-sm" style={{ color: '#4A3A35' }}>{task.name}</p>
                               <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                 <EventBadge event={getEvent(task.event_id)} />
-                                {task.assignee_id && (
+                                {task.assigned_to && (
                                   <span className="flex items-center gap-1 text-xs" style={{ color: '#8C7B75' }}>
                                     <User size={10} />
-                                    {getAssignee(task.assignee_id)?.name}
+                                    {getAssignee(task.assigned_to)?.name}
                                   </span>
                                 )}
                                 {task.deadline && (

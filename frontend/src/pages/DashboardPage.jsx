@@ -115,7 +115,7 @@ export default function DashboardPage() {
     Promise.all([
       client.get('/api/tasks'),
       client.get('/api/events'),
-      client.get('/api/family'),
+      client.get('/api/family-members'),
       client.get('/api/expenses'),
     ])
       .then(([tasksRes, eventsRes, familyRes, expensesRes]) => {
@@ -129,7 +129,7 @@ export default function DashboardPage() {
   }, [])
 
   const filteredTasks = selectedPerson
-    ? tasks.filter(t => t.assignee_id === selectedPerson)
+    ? tasks.filter(t => t.assigned_to === selectedPerson)
     : tasks
 
   const pending = filteredTasks.filter(t => t.status === 'pending').length
@@ -281,7 +281,7 @@ export default function DashboardPage() {
                       </span>
                       <span className="flex items-center gap-1 text-xs" style={{ color: '#8C7B75' }}>
                         <User size={10} />
-                        {getAssigneeName(task.assignee_id)}
+                        {getAssigneeName(task.assigned_to)}
                       </span>
                     </div>
                   </div>

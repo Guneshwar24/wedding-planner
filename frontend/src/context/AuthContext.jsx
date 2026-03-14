@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
 
   async function login(phone, password) {
     const res = await client.post('/api/auth/login', { phone, password })
-    const { token: newToken, user: newUser } = res.data
+    const { access_token: newToken, user: newUser } = res.data
     localStorage.setItem('shaadi_token', newToken)
     setToken(newToken)
     setUser(newUser)

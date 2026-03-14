@@ -35,7 +35,7 @@ export default function SettingsPage() {
   const [addingEvent, setAddingEvent] = useState(false)
 
   useEffect(() => {
-    client.get('/api/family')
+    client.get('/api/family-members')
       .then(res => setFamily(res.data))
       .catch(() => toast.error('Failed to load family members'))
       .finally(() => setLoadingFamily(false))
@@ -65,7 +65,7 @@ export default function SettingsPage() {
     e.preventDefault()
     if (!newMemberName.trim()) return toast.error('Name is required')
     try {
-      const res = await client.post('/api/family', {
+      const res = await client.post('/api/family-members', {
         name: newMemberName.trim(),
         phone: newMemberPhone.trim() || null,
       })
@@ -81,7 +81,7 @@ export default function SettingsPage() {
 
   async function deleteMember(id) {
     try {
-      await client.delete(`/api/family/${id}`)
+      await client.delete(`/api/family-members/${id}`)
       setFamily(prev => prev.filter(m => m.id !== id))
       toast.success('Member removed')
     } catch {
