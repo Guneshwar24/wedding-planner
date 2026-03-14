@@ -1,14 +1,20 @@
 import { NavLink } from 'react-router-dom'
-import { Home, CheckSquare, DollarSign, Settings } from 'lucide-react'
+import { Home, CheckSquare, DollarSign, Settings, ShieldCheck } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
-const navItems = [
+const baseNavItems = [
   { to: '/', icon: Home, label: 'Home', testId: 'nav-home' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks', testId: 'nav-tasks' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', testId: 'nav-expenses' },
   { to: '/settings', icon: Settings, label: 'Settings', testId: 'nav-settings' },
 ]
 
+const adminNavItem = { to: '/admin', icon: ShieldCheck, label: 'Admin', testId: 'nav-admin' }
+
 export default function BottomNav() {
+  const { isAdmin } = useAuth()
+  const navItems = isAdmin ? [...baseNavItems, adminNavItem] : baseNavItems
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-border">
       <div className="flex items-center justify-around px-2 py-2 max-w-lg mx-auto">

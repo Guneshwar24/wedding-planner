@@ -9,14 +9,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
       else setLoading(false)
     })
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
@@ -39,31 +37,28 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }
 
-  // phone + password login/signup (email = phone@shaadi.app)
-  async function login(phone, password) {
-    const email = `${phone}@shaadi.app`
+  // Step 1: check whitelist then send OTP to email
+  async function sendOtp(email) {
+    const { data: allowed, error: rpcError } = await supabase
+      .rpc('is_email_whitelisted', { p_email: email })
+    if (rpcError) throw rpcError
+    if (!allowed) throw new Error('This email is not authorised. Contact the admin to get access.')
 
-    // Try sign in first
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    })
+    if (error) throw error
+  }
 
-    if (error) {
-      // If user doesn't exist, sign up
-      if (error.message.includes('Invalid login credentials') || error.message.includes('Email not confirmed')) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            // Skip email confirmation for internal app
-            data: { phone }
-          }
-        })
-        if (signUpError) throw signUpError
-        // Profile is auto-created by DB trigger
-        return signUpData
-      }
-      throw error
-    }
-
+  // Step 2: verify the 6-digit OTP
+  async function verifyOtp(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    })
+    if (error) throw error
     return data
   }
 
@@ -81,8 +76,10 @@ export function AuthProvider({ children }) {
     setProfile(prev => ({ ...prev, name }))
   }
 
+  const isAdmin = profile?.is_admin === true
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout, updateName }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, sendOtp, verifyOtp, logout, updateName }}>
       {children}
     </AuthContext.Provider>
   )

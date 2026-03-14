@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import TasksPage from './pages/TasksPage'
 import ExpensesPage from './pages/ExpensesPage'
 import SettingsPage from './pages/SettingsPage'
+import AdminPage from './pages/AdminPage'
 import BottomNav from './components/BottomNav'
 
 function PrivateRoute() {
@@ -63,10 +65,12 @@ export default function App() {
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
+      <SpeedInsights />
     </BrowserRouter>
   )
 }
