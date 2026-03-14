@@ -13,7 +13,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [fetching, setFetching] = useState(true);
 
-  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -29,7 +29,7 @@ export default function AdminPage() {
   async function loadData() {
     setFetching(true);
     const [{ data: wl }, { data: u }] = await Promise.all([
-      supabase.from('whitelisted_phones').select('*').order('added_at'),
+      supabase.from('whitelisted_emails').select('*').order('added_at'),
       supabase.from('profiles').select('*').order('created_at'),
     ]);
     setWhitelist(wl ?? []);
@@ -39,19 +39,18 @@ export default function AdminPage() {
 
   async function addToWhitelist(e) {
     e.preventDefault();
-    if (!newPhone.trim()) return;
+    if (!newEmail.trim()) return;
     setAdding(true);
-    const phone = newPhone.trim().startsWith('+') ? newPhone.trim() : `+${newPhone.trim()}`;
-    const { error } = await supabase.from('whitelisted_phones').insert({
-      phone,
+    const { error } = await supabase.from('whitelisted_emails').insert({
+      email: newEmail.trim().toLowerCase(),
       name: newName.trim() || null,
       is_admin: newIsAdmin,
     });
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success(`${phone} added to whitelist`);
-      setNewPhone('');
+      toast.success(`${newEmail} added`);
+      setNewEmail('');
       setNewName('');
       setNewIsAdmin(false);
       loadData();
@@ -59,20 +58,17 @@ export default function AdminPage() {
     setAdding(false);
   }
 
-  async function removeFromWhitelist(phone) {
-    const { error } = await supabase.from('whitelisted_phones').delete().eq('phone', phone);
+  async function removeFromWhitelist(email) {
+    const { error } = await supabase.from('whitelisted_emails').delete().eq('email', email);
     if (error) toast.error(error.message);
-    else {
-      toast.success(`${phone} removed`);
-      loadData();
-    }
+    else { toast.success(`${email} removed`); loadData(); }
   }
 
-  async function toggleAdminFlag(phone, current) {
+  async function toggleAdminFlag(email, current) {
     const { error } = await supabase
-      .from('whitelisted_phones')
+      .from('whitelisted_emails')
       .update({ is_admin: !current })
-      .eq('phone', phone);
+      .eq('email', email);
     if (error) toast.error(error.message);
     else loadData();
   }
@@ -97,14 +93,14 @@ export default function AdminPage() {
       {/* Add to whitelist */}
       <section className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <h2 className="font-body font-semibold text-sm mb-3" style={{ color: '#4A3A35' }}>
-          Add Phone to Whitelist
+          Add Email to Whitelist
         </h2>
         <form onSubmit={addToWhitelist} className="flex flex-col gap-3">
           <input
-            type="tel"
-            value={newPhone}
-            onChange={(e) => setNewPhone(e.target.value)}
-            placeholder="+91 9876543210"
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="family@example.com"
             required
             className="font-body text-sm px-4 py-2.5 rounded-xl border outline-none"
             style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
@@ -141,15 +137,15 @@ export default function AdminPage() {
       {/* Whitelist */}
       <section className="bg-white rounded-2xl shadow-sm p-5 mb-6">
         <h2 className="font-body font-semibold text-sm mb-3" style={{ color: '#4A3A35' }}>
-          Whitelisted Numbers ({whitelist.length})
+          Whitelisted Emails ({whitelist.length})
         </h2>
         {whitelist.length === 0 ? (
-          <p className="font-body text-sm" style={{ color: '#8C7B75' }}>No numbers yet.</p>
+          <p className="font-body text-sm" style={{ color: '#8C7B75' }}>No emails yet.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {whitelist.map((w) => (
               <li
-                key={w.phone}
+                key={w.email}
                 className="flex items-center justify-between rounded-xl px-3 py-2"
                 style={{ backgroundColor: '#FFF5F0' }}
               >
@@ -165,11 +161,11 @@ export default function AdminPage() {
                       </span>
                     )}
                   </p>
-                  <p className="font-body text-xs" style={{ color: '#8C7B75' }}>{w.phone}</p>
+                  <p className="font-body text-xs" style={{ color: '#8C7B75' }}>{w.email}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => toggleAdminFlag(w.phone, w.is_admin)}
+                    onClick={() => toggleAdminFlag(w.email, w.is_admin)}
                     title={w.is_admin ? 'Remove admin' : 'Make admin'}
                     className="p-1.5 rounded-lg transition-colors hover:bg-white"
                     style={{ color: w.is_admin ? '#C05621' : '#8C7B75' }}
@@ -177,7 +173,7 @@ export default function AdminPage() {
                     {w.is_admin ? <Shield size={16} /> : <ShieldOff size={16} />}
                   </button>
                   <button
-                    onClick={() => removeFromWhitelist(w.phone)}
+                    onClick={() => removeFromWhitelist(w.email)}
                     title="Remove"
                     className="p-1.5 rounded-lg transition-colors hover:bg-white"
                     style={{ color: '#E53E3E' }}
@@ -218,7 +214,7 @@ export default function AdminPage() {
                       </span>
                     )}
                   </p>
-                  <p className="font-body text-xs" style={{ color: '#8C7B75' }}>{u.phone}</p>
+                  <p className="font-body text-xs" style={{ color: '#8C7B75' }}>{u.email}</p>
                 </div>
               </li>
             ))}

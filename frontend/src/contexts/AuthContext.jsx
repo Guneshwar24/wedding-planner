@@ -37,24 +37,26 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }
 
-  // Step 1: check whitelist then send OTP
-  async function sendOtp(phone) {
+  // Step 1: check whitelist then send OTP to email
+  async function sendOtp(email) {
     const { data: allowed, error: rpcError } = await supabase
-      .rpc('is_phone_whitelisted', { p_phone: phone })
-
+      .rpc('is_email_whitelisted', { p_email: email })
     if (rpcError) throw rpcError
-    if (!allowed) throw new Error('This number is not authorised. Contact the admin to get access.')
+    if (!allowed) throw new Error('This email is not authorised. Contact the admin to get access.')
 
-    const { error } = await supabase.auth.signInWithOtp({ phone })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    })
     if (error) throw error
   }
 
   // Step 2: verify the 6-digit OTP
-  async function verifyOtp(phone, token) {
+  async function verifyOtp(email, token) {
     const { data, error } = await supabase.auth.verifyOtp({
-      phone,
+      email,
       token,
-      type: 'sms',
+      type: 'email',
     })
     if (error) throw error
     return data

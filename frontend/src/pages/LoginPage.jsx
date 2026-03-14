@@ -4,31 +4,21 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('phone'); // 'phone' | 'otp'
+  const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [loading, setLoading] = useState(false);
 
   const { sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
-  // Normalise to E.164: if user types 10 digits assume +91, else keep as-is
-  function normalisePhone(raw) {
-    const digits = raw.replace(/\D/g, '');
-    if (raw.startsWith('+')) return raw.trim();
-    if (digits.length === 10) return `+91${digits}`;
-    return `+${digits}`;
-  }
-
   async function handleSendOtp(e) {
     e.preventDefault();
     if (loading) return;
-    const normalised = normalisePhone(phone);
     setLoading(true);
     try {
-      await sendOtp(normalised);
-      toast.success(`OTP sent to ${normalised}`);
-      setPhone(normalised); // store normalised form for verify step
+      await sendOtp(email.trim().toLowerCase());
+      toast.success(`OTP sent to ${email}`);
       setStep('otp');
     } catch (err) {
       toast.error(err.message || 'Failed to send OTP');
@@ -42,7 +32,7 @@ export default function LoginPage() {
     if (loading) return;
     setLoading(true);
     try {
-      await verifyOtp(phone, otp.trim());
+      await verifyOtp(email.trim().toLowerCase(), otp.trim());
       navigate('/');
     } catch (err) {
       toast.error(err.message || 'Invalid OTP. Please try again.');
@@ -57,7 +47,6 @@ export default function LoginPage() {
       style={{ backgroundColor: '#FDFBF7' }}
     >
       <div className="w-full max-w-sm bg-white rounded-3xl shadow-lg p-8">
-        {/* Heading */}
         <div className="text-center mb-8">
           <h1 className="font-heading text-4xl mb-2" style={{ color: '#C05621' }}>
             Shaadi Brain
@@ -67,34 +56,27 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {step === 'phone' ? (
+        {step === 'email' ? (
           <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
             <div>
               <label
-                htmlFor="phone"
+                htmlFor="email"
                 className="font-body text-xs font-semibold mb-1 block"
                 style={{ color: '#4A3A35' }}
               >
-                Phone Number
+                Email Address
               </label>
               <input
-                id="phone"
-                data-testid="phone-input"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 9876543210 or +47 92949364"
+                id="email"
+                data-testid="email-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
                 required
                 className="w-full font-body text-sm px-4 py-3 rounded-xl border outline-none"
-                style={{
-                  borderColor: '#E2D8D0',
-                  backgroundColor: '#FFF5F0',
-                  color: '#4A3A35',
-                }}
+                style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
               />
-              <p className="font-body text-xs mt-1" style={{ color: '#8C7B75' }}>
-                Include country code, e.g. +91 for India, +47 for Norway
-              </p>
             </div>
 
             <button
@@ -104,14 +86,7 @@ export default function LoginPage() {
               className="w-full font-body font-semibold text-sm text-white rounded-full py-3 mt-2 flex items-center justify-center gap-2 transition-opacity"
               style={{ backgroundColor: '#C05621', opacity: loading ? 0.75 : 1 }}
             >
-              {loading ? (
-                <>
-                  <Spinner />
-                  <span>Sending OTP...</span>
-                </>
-              ) : (
-                'Send OTP'
-              )}
+              {loading ? <><Spinner /><span>Sending OTP...</span></> : 'Send OTP'}
             </button>
           </form>
         ) : (
@@ -121,7 +96,7 @@ export default function LoginPage() {
                 Enter the 6-digit code sent to
               </p>
               <p className="font-body font-semibold text-sm" style={{ color: '#C05621' }}>
-                {phone}
+                {email}
               </p>
             </div>
 
@@ -145,11 +120,7 @@ export default function LoginPage() {
                 required
                 autoFocus
                 className="w-full font-body text-2xl text-center tracking-widest px-4 py-3 rounded-xl border outline-none"
-                style={{
-                  borderColor: '#E2D8D0',
-                  backgroundColor: '#FFF5F0',
-                  color: '#4A3A35',
-                }}
+                style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
               />
             </div>
 
@@ -159,23 +130,16 @@ export default function LoginPage() {
               className="w-full font-body font-semibold text-sm text-white rounded-full py-3 flex items-center justify-center gap-2 transition-opacity"
               style={{ backgroundColor: '#C05621', opacity: (loading || otp.length < 6) ? 0.75 : 1 }}
             >
-              {loading ? (
-                <>
-                  <Spinner />
-                  <span>Verifying...</span>
-                </>
-              ) : (
-                'Verify & Sign In'
-              )}
+              {loading ? <><Spinner /><span>Verifying...</span></> : 'Verify & Sign In'}
             </button>
 
             <button
               type="button"
-              onClick={() => { setStep('phone'); setOtp(''); }}
+              onClick={() => { setStep('email'); setOtp(''); }}
               className="font-body text-xs text-center"
               style={{ color: '#8C7B75' }}
             >
-              Use a different number
+              Use a different email
             </button>
           </form>
         )}

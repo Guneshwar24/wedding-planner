@@ -6,16 +6,16 @@
 -- ── profiles ────────────────────────────────────────────────
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  phone text unique not null,
+  email text unique not null,
   name text not null,
   is_admin boolean default false,
   created_at timestamptz default now()
 );
 
--- ── whitelisted_phones ───────────────────────────────────────
--- Only phones in this list can log in (E.164 format, e.g. +4792949364)
-create table if not exists whitelisted_phones (
-  phone text primary key,
+-- ── whitelisted_emails ───────────────────────────────────────
+-- Only emails in this list can log in
+create table if not exists whitelisted_emails (
+  email text primary key,
   name text,
   is_admin boolean default false,
   added_at timestamptz default now()
@@ -67,7 +67,7 @@ create table if not exists expenses (
 -- ============================================================
 
 alter table profiles enable row level security;
-alter table whitelisted_phones enable row level security;
+alter table whitelisted_emails enable row level security;
 alter table events enable row level security;
 alter table family_members enable row level security;
 alter table tasks enable row level security;
@@ -82,8 +82,8 @@ create policy "profiles_select" on profiles
 create policy "profiles_insert" on profiles for insert with check (auth.uid() = id);
 create policy "profiles_update" on profiles for update using (auth.uid() = id);
 
--- whitelisted_phones: admins manage; public function handles pre-auth check
-create policy "whitelist_admin_all" on whitelisted_phones
+-- whitelisted_emails: only admins can manage
+create policy "whitelist_admin_all" on whitelisted_emails
   for all using (
     exists (select 1 from profiles where id = auth.uid() and is_admin = true)
   );
@@ -97,22 +97,22 @@ create policy "expenses_all" on expenses for all using (auth.role() = 'authentic
 -- ============================================================
 -- Helper: check whitelist before sending OTP (callable by anon)
 -- ============================================================
-create or replace function public.is_phone_whitelisted(p_phone text)
+create or replace function public.is_email_whitelisted(p_email text)
 returns boolean as $$
-  select exists (select 1 from whitelisted_phones where phone = p_phone)
+  select exists (select 1 from whitelisted_emails where email = p_email)
 $$ language sql security definer;
 
-grant execute on function public.is_phone_whitelisted(text) to anon;
-grant execute on function public.is_phone_whitelisted(text) to authenticated;
+grant execute on function public.is_email_whitelisted(text) to anon;
+grant execute on function public.is_email_whitelisted(text) to authenticated;
 
 -- ============================================================
 -- Seed Data
 -- ============================================================
 
--- Admin phone (pre-whitelisted)
-insert into whitelisted_phones (phone, name, is_admin) values
-  ('+4792949364', 'Admin', true)
-on conflict (phone) do nothing;
+-- Admin email
+insert into whitelisted_emails (email, name, is_admin) values
+  ('humpetohaino@gmail.com', 'Admin', true)
+on conflict (email) do nothing;
 
 -- Default events
 insert into events (id, name, color, budget, is_default) values
@@ -136,42 +136,35 @@ insert into family_members (id, name, phone) values
 on conflict (id) do nothing;
 
 -- ============================================================
--- Helper function: auto-create profile on signup (phone OTP)
+-- Auto-create profile on first login
 -- ============================================================
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
-  phone_val text;
+  email_val text;
   name_val text;
   admin_val boolean;
 begin
-  -- Phone OTP: new.phone is set. Legacy email: extract from email field.
-  if new.phone is not null and new.phone != '' then
-    phone_val := new.phone;
-  else
-    phone_val := split_part(new.email, '@', 1);
-  end if;
+  email_val := new.email;
 
   -- Look up display name and admin flag from whitelist
   select w.name, w.is_admin
   into name_val, admin_val
-  from whitelisted_phones w
-  where w.phone = phone_val;
+  from whitelisted_emails w
+  where w.email = email_val;
 
-  -- Fallback name if not in whitelist
   if name_val is null then
-    name_val := 'User ' || right(phone_val, 4);
+    name_val := split_part(email_val, '@', 1);
   end if;
 
-  insert into public.profiles (id, phone, name, is_admin)
-  values (new.id, phone_val, name_val, coalesce(admin_val, false))
+  insert into public.profiles (id, email, name, is_admin)
+  values (new.id, email_val, name_val, coalesce(admin_val, false))
   on conflict (id) do nothing;
 
   return new;
 end;
 $$ language plpgsql security definer;
 
--- trigger on auth.users insert
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
