@@ -1,19 +1,18 @@
 -- ============================================================
 -- Shaadi Brain – Supabase Schema
--- Run this in your Supabase project's SQL Editor
+-- Safe to re-run: uses IF NOT EXISTS and ADD COLUMN IF NOT EXISTS
 -- ============================================================
 
--- ── profiles ────────────────────────────────────────────────
+-- ── tables ──────────────────────────────────────────────────
+
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
   name text not null,
-  is_admin boolean default false,
   created_at timestamptz default now()
 );
+alter table profiles add column if not exists is_admin boolean default false;
 
--- ── whitelisted_emails ───────────────────────────────────────
--- Only emails in this list can log in
 create table if not exists whitelisted_emails (
   email text primary key,
   name text,
@@ -21,7 +20,6 @@ create table if not exists whitelisted_emails (
   added_at timestamptz default now()
 );
 
--- ── events ──────────────────────────────────────────────────
 create table if not exists events (
   id text primary key,
   name text not null,
@@ -31,7 +29,6 @@ create table if not exists events (
   created_at timestamptz default now()
 );
 
--- ── family_members ──────────────────────────────────────────
 create table if not exists family_members (
   id text primary key,
   name text not null,
@@ -39,7 +36,6 @@ create table if not exists family_members (
   created_at timestamptz default now()
 );
 
--- ── tasks ───────────────────────────────────────────────────
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -51,7 +47,6 @@ create table if not exists tasks (
   created_at timestamptz default now()
 );
 
--- ── expenses ────────────────────────────────────────────────
 create table if not exists expenses (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -62,41 +57,47 @@ create table if not exists expenses (
   created_at timestamptz default now()
 );
 
--- ============================================================
--- Row Level Security
--- ============================================================
+-- ── row level security ───────────────────────────────────────
 
-alter table profiles enable row level security;
+alter table profiles         enable row level security;
 alter table whitelisted_emails enable row level security;
-alter table events enable row level security;
-alter table family_members enable row level security;
-alter table tasks enable row level security;
-alter table expenses enable row level security;
+alter table events           enable row level security;
+alter table family_members   enable row level security;
+alter table tasks            enable row level security;
+alter table expenses         enable row level security;
 
--- profiles: users see their own row; admins see all
-create policy "profiles_select" on profiles
-  for select using (
-    auth.uid() = id OR
-    exists (select 1 from profiles where id = auth.uid() and is_admin = true)
-  );
+-- profiles
+drop policy if exists "profiles_select" on profiles;
+create policy "profiles_select" on profiles for select using (
+  auth.uid() = id or
+  exists (select 1 from profiles where id = auth.uid() and is_admin = true)
+);
+drop policy if exists "profiles_insert" on profiles;
 create policy "profiles_insert" on profiles for insert with check (auth.uid() = id);
+drop policy if exists "profiles_update" on profiles;
 create policy "profiles_update" on profiles for update using (auth.uid() = id);
 
--- whitelisted_emails: only admins can manage
-create policy "whitelist_admin_all" on whitelisted_emails
-  for all using (
-    exists (select 1 from profiles where id = auth.uid() and is_admin = true)
-  );
+-- whitelisted_emails
+drop policy if exists "whitelist_admin_all" on whitelisted_emails;
+create policy "whitelist_admin_all" on whitelisted_emails for all using (
+  exists (select 1 from profiles where id = auth.uid() and is_admin = true)
+);
 
--- shared tables: any authenticated user can do full CRUD
+-- shared tables
+drop policy if exists "events_all" on events;
 create policy "events_all" on events for all using (auth.role() = 'authenticated');
+
+drop policy if exists "family_members_all" on family_members;
 create policy "family_members_all" on family_members for all using (auth.role() = 'authenticated');
+
+drop policy if exists "tasks_all" on tasks;
 create policy "tasks_all" on tasks for all using (auth.role() = 'authenticated');
+
+drop policy if exists "expenses_all" on expenses;
 create policy "expenses_all" on expenses for all using (auth.role() = 'authenticated');
 
--- ============================================================
--- Helper: check whitelist before sending OTP (callable by anon)
--- ============================================================
+-- ── helper function (anon-callable whitelist check) ──────────
+
 create or replace function public.is_email_whitelisted(p_email text)
 returns boolean as $$
   select exists (select 1 from whitelisted_emails where email = p_email)
@@ -105,16 +106,45 @@ $$ language sql security definer;
 grant execute on function public.is_email_whitelisted(text) to anon;
 grant execute on function public.is_email_whitelisted(text) to authenticated;
 
--- ============================================================
--- Seed Data
--- ============================================================
+-- ── auto-create profile on first login ───────────────────────
 
--- Admin email
+create or replace function public.handle_new_user()
+returns trigger as $$
+declare
+  name_val text;
+  admin_val boolean;
+begin
+  select w.name, w.is_admin
+  into name_val, admin_val
+  from whitelisted_emails w
+  where w.email = new.email;
+
+  if name_val is null then
+    name_val := split_part(new.email, '@', 1);
+  end if;
+
+  insert into public.profiles (id, email, name, is_admin)
+  values (new.id, new.email, name_val, coalesce(admin_val, false))
+  on conflict do nothing;
+
+  return new;
+exception when others then
+  -- never block auth if profile creation fails
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- ── seed data (safe: on conflict do nothing) ─────────────────
+
 insert into whitelisted_emails (email, name, is_admin) values
   ('humpetohaino@gmail.com', 'Admin', true)
 on conflict (email) do nothing;
 
--- Default events
 insert into events (id, name, color, budget, is_default) values
   ('sangeet',  'Sangeet',  '#E53E3E', 2000000, true),
   ('mayara',   'Mayara',   '#D69E2E', 1500000, true),
@@ -123,7 +153,6 @@ insert into events (id, name, color, budget, is_default) values
   ('mehandi',  'Mehandi',  '#38A169',  500000, true)
 on conflict (id) do nothing;
 
--- Default family members
 insert into family_members (id, name, phone) values
   ('anushka',   'Anushka Rathod', null),
   ('kamlesh',   'Kamlesh',        null),
@@ -134,38 +163,3 @@ insert into family_members (id, name, phone) values
   ('harsh',     'Harsh',          null),
   ('keshav',    'Keshav',         null)
 on conflict (id) do nothing;
-
--- ============================================================
--- Auto-create profile on first login
--- ============================================================
-create or replace function public.handle_new_user()
-returns trigger as $$
-declare
-  email_val text;
-  name_val text;
-  admin_val boolean;
-begin
-  email_val := new.email;
-
-  -- Look up display name and admin flag from whitelist
-  select w.name, w.is_admin
-  into name_val, admin_val
-  from whitelisted_emails w
-  where w.email = email_val;
-
-  if name_val is null then
-    name_val := split_part(email_val, '@', 1);
-  end if;
-
-  insert into public.profiles (id, email, name, is_admin)
-  values (new.id, email_val, name_val, coalesce(admin_val, false))
-  on conflict (id) do nothing;
-
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
