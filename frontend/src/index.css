@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Manrope', system-ui, sans-serif;
+    background-color: #FDFBF7;
+    color: #4A3A35;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #FFF5F0;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #E2D8D0;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-hover text-white font-semibold py-3 px-6 rounded-full transition-colors duration-200 w-full;
+  }
+
+  .card {
+    @apply bg-white rounded-3xl shadow-sm border border-border p-4;
+  }
+
+  .pill-btn {
+    @apply px-4 py-2 rounded-full text-sm font-medium border border-border text-wtext transition-all duration-200;
+  }
+
+  .pill-btn-active {
+    @apply bg-primary text-white border-primary;
+  }
+
+  .input-field {
+    @apply w-full border border-border rounded-xl px-4 py-3 text-wtext placeholder-muted bg-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors;
+  }
+
+  .section-title {
+    @apply font-heading text-xl font-bold text-wtext mb-4;
+  }
+}
