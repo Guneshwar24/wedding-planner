@@ -125,8 +125,11 @@ begin
 
   insert into public.profiles (id, email, name, is_admin)
   values (new.id, new.email, name_val, coalesce(admin_val, false))
-  on conflict (id) do nothing;
+  on conflict do nothing;
 
+  return new;
+exception when others then
+  -- never block auth if profile creation fails
   return new;
 end;
 $$ language plpgsql security definer;
