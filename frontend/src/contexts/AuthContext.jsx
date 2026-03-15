@@ -51,7 +51,7 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
-  // Step 2: verify the 6-digit OTP
+  // Step 2: verify the 6-digit OTP, then ensure profile exists
   async function verifyOtp(email, token) {
     const { data, error } = await supabase.auth.verifyOtp({
       email,
@@ -59,6 +59,31 @@ export function AuthProvider({ children }) {
       type: 'email',
     })
     if (error) throw error
+
+    // Fallback: create profile if the DB trigger didn't fire
+    if (data?.user) {
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', data.user.id)
+        .maybeSingle()
+
+      if (!existing) {
+        const { data: wl } = await supabase
+          .from('whitelisted_emails')
+          .select('name, is_admin')
+          .eq('email', email)
+          .maybeSingle()
+
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          email,
+          name: wl?.name ?? email.split('@')[0],
+          is_admin: wl?.is_admin ?? false,
+        })
+      }
+    }
+
     return data
   }
 
