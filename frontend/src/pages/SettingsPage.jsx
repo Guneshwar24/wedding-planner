@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { User, Users, Calendar, Plus, Trash2, Edit2, Check, X, LogOut, Phone } from 'lucide-react'
+import { User, Users, Calendar, Plus, Trash2, Edit2, Check, X, LogOut, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 const PRESET_COLORS = [
   '#E53E3E', '#D69E2E', '#8B6914', '#805AD5', '#38A169',
-  '#3182CE', '#E53E3E', '#DD6B20', '#C05621', '#2D3748',
+  '#3182CE', '#DD6B20', '#C05621', '#2D3748', '#B7791F',
 ]
 
 export default function SettingsPage() {
@@ -22,11 +22,15 @@ export default function SettingsPage() {
 
   // new family member
   const [showAddMember, setShowAddMember] = useState(false)
-  const [newMember, setNewMember] = useState({ name: '', phone: '' })
+  const [newMember, setNewMember] = useState({ name: '', email: '' })
 
   // new event
   const [showAddEvent, setShowAddEvent] = useState(false)
   const [newEvent, setNewEvent] = useState({ name: '', color: '#C05621' })
+
+  // edit event
+  const [editingEventId, setEditingEventId] = useState(null)
+  const [editEventData, setEditEventData] = useState({ name: '', color: '' })
 
   useEffect(() => {
     fetchData()
@@ -63,14 +67,26 @@ export default function SettingsPage() {
   async function addMember() {
     if (!newMember.name.trim()) return toast.error('Name is required')
     const id = newMember.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()
+    const email = newMember.email.trim().toLowerCase() || null
+
     const { error } = await supabase.from('family_members').insert({
       id,
       name: newMember.name.trim(),
-      phone: newMember.phone.trim() || null,
+      email,
     })
     if (error) return toast.error(error.message)
+
+    // Also whitelist their email so they can log in
+    if (email) {
+      const { error: wlError } = await supabase.from('whitelisted_emails').upsert(
+        { email, name: newMember.name.trim(), is_admin: false },
+        { onConflict: 'email' }
+      )
+      if (wlError) toast.error('Added person but failed to whitelist email: ' + wlError.message)
+    }
+
     toast.success(`${newMember.name} added!`)
-    setNewMember({ name: '', phone: '' })
+    setNewMember({ name: '', email: '' })
     setShowAddMember(false)
     fetchData()
   }
@@ -103,6 +119,23 @@ export default function SettingsPage() {
     const { error } = await supabase.from('events').delete().eq('id', id)
     if (error) return toast.error(error.message)
     toast.success('Event removed')
+    fetchData()
+  }
+
+  function startEditEvent(event) {
+    setEditingEventId(event.id)
+    setEditEventData({ name: event.name, color: event.color })
+  }
+
+  async function saveEvent() {
+    if (!editEventData.name.trim()) return toast.error('Event name is required')
+    const { error } = await supabase
+      .from('events')
+      .update({ name: editEventData.name.trim(), color: editEventData.color })
+      .eq('id', editingEventId)
+    if (error) return toast.error(error.message)
+    toast.success('Event updated!')
+    setEditingEventId(null)
     fetchData()
   }
 
@@ -170,12 +203,12 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* Phone */}
+          {/* Email */}
           <div className="mb-5">
-            <label className="text-xs font-medium text-muted uppercase tracking-wide mb-1 block">Phone</label>
+            <label className="text-xs font-medium text-muted uppercase tracking-wide mb-1 block">Email</label>
             <div className="flex items-center gap-2 bg-paper rounded-xl px-4 py-3">
-              <Phone size={15} className="text-muted" />
-              <span className="text-muted">+91 {profile?.phone}</span>
+              <Mail size={15} className="text-muted" />
+              <span className="text-muted text-sm">{profile?.email}</span>
             </div>
           </div>
 
@@ -202,7 +235,7 @@ export default function SettingsPage() {
               <div className="w-10 h-10 rounded-full bg-gold/10 flex items-center justify-center">
                 <Users size={20} className="text-gold" />
               </div>
-              <h2 className="font-heading text-lg text-wtext">Family Members</h2>
+              <h2 className="font-heading text-lg text-wtext">People</h2>
             </div>
             <button
               onClick={() => setShowAddMember(!showAddMember)}
@@ -230,13 +263,13 @@ export default function SettingsPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Phone (optional)"
-                    type="tel"
-                    value={newMember.phone}
-                    onChange={e => setNewMember(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="Email (optional — whitelists login access)"
+                    type="email"
+                    value={newMember.email}
+                    onChange={e => setNewMember(p => ({ ...p, email: e.target.value }))}
                   />
                   <button onClick={addMember} className="btn-primary">
-                    Add Member
+                    Add Person
                   </button>
                 </div>
               </motion.div>
@@ -249,7 +282,9 @@ export default function SettingsPage() {
               <div key={member.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                 <div>
                   <p className="font-medium text-wtext text-sm">{member.name}</p>
-                  {member.phone && <p className="text-xs text-muted">+91 {member.phone}</p>}
+                  {member.email && (
+                    <p className="text-xs text-muted">{member.email}</p>
+                  )}
                 </div>
                 <button
                   onClick={() => deleteMember(member.id)}
@@ -274,7 +309,7 @@ export default function SettingsPage() {
               <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
                 <Calendar size={20} className="text-success" />
               </div>
-              <h2 className="font-heading text-lg text-wtext">Wedding Events</h2>
+              <h2 className="font-heading text-lg text-wtext">Wedding Functions</h2>
             </div>
             <button
               onClick={() => setShowAddEvent(!showAddEvent)}
@@ -296,7 +331,7 @@ export default function SettingsPage() {
                 <div className="bg-paper rounded-2xl p-4 space-y-3">
                   <input
                     className="input-field"
-                    placeholder="Event name *"
+                    placeholder="Function name *"
                     value={newEvent.name}
                     onChange={e => setNewEvent(p => ({ ...p, name: e.target.value }))}
                   />
@@ -317,7 +352,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <button onClick={addEvent} className="btn-primary">
-                    Add Event
+                    Add Function
                   </button>
                 </div>
               </motion.div>
@@ -325,23 +360,66 @@ export default function SettingsPage() {
           </AnimatePresence>
 
           {/* Events List */}
-          <div className="space-y-2">
+          <div className="space-y-0">
             {events.map(event => (
-              <div key={event.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: event.color }} />
-                  <span className="font-medium text-wtext text-sm">{event.name}</span>
-                  {event.is_default && (
-                    <span className="text-xs text-muted bg-border/50 rounded-full px-2 py-0.5">default</span>
-                  )}
-                </div>
-                {!event.is_default && (
-                  <button
-                    onClick={() => deleteEvent(event.id)}
-                    className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+              <div key={event.id} className="border-b border-border/50 last:border-0">
+                {editingEventId === event.id ? (
+                  <div className="py-3 space-y-2">
+                    <input
+                      className="input-field"
+                      value={editEventData.name}
+                      onChange={e => setEditEventData(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Function name *"
+                      autoFocus
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {PRESET_COLORS.map(color => (
+                        <button
+                          key={color}
+                          onClick={() => setEditEventData(p => ({ ...p, color }))}
+                          className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                          style={{
+                            backgroundColor: color,
+                            borderColor: editEventData.color === color ? '#4A3A35' : 'transparent',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={saveEvent} className="flex-1 btn-primary text-sm py-1.5">
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingEventId(null)}
+                        className="px-3 py-1.5 rounded-xl text-sm text-muted border border-border hover:bg-cream transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: event.color }} />
+                      <span className="font-medium text-wtext text-sm">{event.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => startEditEvent(event)}
+                        className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      {!event.is_default && (
+                        <button
+                          onClick={() => deleteEvent(event.id)}
+                          className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}

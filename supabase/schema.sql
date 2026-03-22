@@ -12,6 +12,8 @@ create table if not exists profiles (
   created_at timestamptz default now()
 );
 alter table profiles add column if not exists is_admin boolean default false;
+alter table tasks add column if not exists subtasks jsonb default '[]'::jsonb;
+alter table family_members add column if not exists email text;
 
 create table if not exists whitelisted_emails (
   email text primary key,
@@ -44,6 +46,7 @@ create table if not exists tasks (
   deadline date,
   notes text,
   status text default 'pending' check (status in ('pending', 'in_progress', 'done')),
+  subtasks jsonb default '[]'::jsonb,
   created_at timestamptz default now()
 );
 
