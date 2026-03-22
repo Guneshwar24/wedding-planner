@@ -37,42 +37,26 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }
 
-  // Step 1: check whitelist then send OTP to email
-  async function sendOtp(email) {
-    const { data: allowed, error: rpcError } = await supabase
-      .rpc('is_email_whitelisted', { p_email: email })
-    if (rpcError) throw rpcError
-    if (!allowed) throw new Error('This email is not authorised. Contact the admin to get access.')
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true },
+  // Enter email → instantly signed in (no OTP, no password)
+  async function loginWithEmail(email) {
+    const { data, error: fnError } = await supabase.functions.invoke('instant-login', {
+      body: { email },
     })
-    if (error) {
-      if (error.message?.toLowerCase().includes('sending confirmation email') ||
-          error.message?.toLowerCase().includes('smtp') ||
-          error.message?.toLowerCase().includes('email')) {
-        throw new Error('Unable to send OTP email. The email service is not configured — ask the admin to set up SMTP in the Supabase dashboard.')
-      }
-      throw error
-    }
-  }
+    if (fnError) throw fnError
+    if (data?.error) throw new Error(data.error)
 
-  // Step 2: verify the 6-digit OTP, then ensure profile exists
-  async function verifyOtp(email, token) {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
+    const { data: session, error } = await supabase.auth.verifyOtp({
+      token_hash: data.token_hash,
+      type: 'magiclink',
     })
     if (error) throw error
 
     // Fallback: create profile if the DB trigger didn't fire
-    if (data?.user) {
+    if (session?.user) {
       const { data: existing } = await supabase
         .from('profiles')
         .select('id')
-        .eq('id', data.user.id)
+        .eq('id', session.user.id)
         .maybeSingle()
 
       if (!existing) {
@@ -83,15 +67,13 @@ export function AuthProvider({ children }) {
           .maybeSingle()
 
         await supabase.from('profiles').insert({
-          id: data.user.id,
+          id: session.user.id,
           email,
           name: wl?.name ?? email.split('@')[0],
           is_admin: wl?.is_admin ?? false,
         })
       }
     }
-
-    return data
   }
 
   async function logout() {
@@ -111,7 +93,7 @@ export function AuthProvider({ children }) {
   const isAdmin = profile?.is_admin === true
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, sendOtp, verifyOtp, logout, updateName }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, loginWithEmail, logout, updateName }}>
       {children}
     </AuthContext.Provider>
   )
