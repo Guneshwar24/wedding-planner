@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,7 +7,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const { loginWithEmail } = useAuth();
-  const navigate = useNavigate();
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -16,10 +14,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await loginWithEmail(email.trim().toLowerCase());
-      navigate('/');
+      // loginWithEmail redirects the page via window.location.href — no navigate needed
     } catch (err) {
       toast.error(err.message || 'Login failed. Please try again.');
-    } finally {
       setLoading(false);
     }
   }

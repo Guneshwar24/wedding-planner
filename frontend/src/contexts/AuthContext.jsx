@@ -40,40 +40,14 @@ export function AuthProvider({ children }) {
   // Enter email → instantly signed in (no OTP, no password)
   async function loginWithEmail(email) {
     const { data, error: fnError } = await supabase.functions.invoke('instant-login', {
-      body: { email },
+      body: { email, redirect_to: window.location.origin },
     })
     if (fnError) throw fnError
     if (data?.error) throw new Error(data.error)
 
-    const { data: session, error } = await supabase.auth.verifyOtp({
-      token_hash: data.token_hash,
-      type: 'magiclink',
-    })
-    if (error) throw error
-
-    // Fallback: create profile if the DB trigger didn't fire
-    if (session?.user) {
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', session.user.id)
-        .maybeSingle()
-
-      if (!existing) {
-        const { data: wl } = await supabase
-          .from('whitelisted_emails')
-          .select('name, is_admin')
-          .eq('email', email)
-          .maybeSingle()
-
-        await supabase.from('profiles').insert({
-          id: session.user.id,
-          email,
-          name: wl?.name ?? email.split('@')[0],
-          is_admin: wl?.is_admin ?? false,
-        })
-      }
-    }
+    // Navigate to the magic link — Supabase verifies it server-side and
+    // redirects back to the app with an active session in the URL
+    window.location.href = data.action_link
   }
 
   async function logout() {

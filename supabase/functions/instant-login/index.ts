@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email } = await req.json()
+    const { email, redirect_to } = await req.json()
     if (!email) {
       return new Response(JSON.stringify({ error: 'Email is required' }), {
         status: 400,
@@ -38,17 +38,20 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Generate a magic link token — no email is sent, we use the token directly
+    // Generate magic link — no email is sent, we redirect to it directly
     const { data, error } = await supabase.auth.admin.generateLink({
       type: 'magiclink',
       email: email.toLowerCase().trim(),
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        redirectTo: redirect_to || undefined,
+      },
     })
 
     if (error) throw error
 
     return new Response(
-      JSON.stringify({ token_hash: data.properties.hashed_token }),
+      JSON.stringify({ action_link: data.properties.action_link }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
