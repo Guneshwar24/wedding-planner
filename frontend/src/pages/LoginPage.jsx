@@ -5,37 +5,20 @@ import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [loading, setLoading] = useState(false);
 
-  const { sendOtp, verifyOtp } = useAuth();
+  const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
 
-  async function handleSendOtp(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
     try {
-      await sendOtp(email.trim().toLowerCase());
-      toast.success(`OTP sent to ${email}`);
-      setStep('otp');
-    } catch (err) {
-      toast.error(err.message || 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleVerifyOtp(e) {
-    e.preventDefault();
-    if (loading) return;
-    setLoading(true);
-    try {
-      await verifyOtp(email.trim().toLowerCase(), otp.trim());
+      await loginWithEmail(email.trim().toLowerCase());
       navigate('/');
     } catch (err) {
-      toast.error(err.message || 'Invalid OTP. Please try again.');
+      toast.error(err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -56,93 +39,38 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {step === 'email' ? (
-          <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="font-body text-xs font-semibold mb-1 block"
-                style={{ color: '#4A3A35' }}
-              >
-                Email Address
-              </label>
-              <input
-                id="email"
-                data-testid="email-input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                className="w-full font-body text-sm px-4 py-3 rounded-xl border outline-none"
-                style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
-              />
-            </div>
-
-            <button
-              data-testid="login-btn"
-              type="submit"
-              disabled={loading}
-              className="w-full font-body font-semibold text-sm text-white rounded-full py-3 mt-2 flex items-center justify-center gap-2 transition-opacity"
-              style={{ backgroundColor: '#C05621', opacity: loading ? 0.75 : 1 }}
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <div>
+            <label
+              htmlFor="email"
+              className="font-body text-xs font-semibold mb-1 block"
+              style={{ color: '#4A3A35' }}
             >
-              {loading ? <><Spinner /><span>Sending OTP...</span></> : 'Send OTP'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
-            <div className="text-center mb-2">
-              <p className="font-body text-sm" style={{ color: '#4A3A35' }}>
-                Enter the 6-digit code sent to
-              </p>
-              <p className="font-body font-semibold text-sm" style={{ color: '#C05621' }}>
-                {email}
-              </p>
-            </div>
+              Email Address
+            </label>
+            <input
+              id="email"
+              data-testid="email-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              className="w-full font-body text-sm px-4 py-3 rounded-xl border outline-none"
+              style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
+            />
+          </div>
 
-            <div>
-              <label
-                htmlFor="otp"
-                className="font-body text-xs font-semibold mb-1 block"
-                style={{ color: '#4A3A35' }}
-              >
-                OTP Code
-              </label>
-              <input
-                id="otp"
-                data-testid="otp-input"
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
-                required
-                autoFocus
-                className="w-full font-body text-2xl text-center tracking-widest px-4 py-3 rounded-xl border outline-none"
-                style={{ borderColor: '#E2D8D0', backgroundColor: '#FFF5F0', color: '#4A3A35' }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || otp.length < 6}
-              className="w-full font-body font-semibold text-sm text-white rounded-full py-3 flex items-center justify-center gap-2 transition-opacity"
-              style={{ backgroundColor: '#C05621', opacity: (loading || otp.length < 6) ? 0.75 : 1 }}
-            >
-              {loading ? <><Spinner /><span>Verifying...</span></> : 'Verify & Sign In'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setStep('email'); setOtp(''); }}
-              className="font-body text-xs text-center"
-              style={{ color: '#8C7B75' }}
-            >
-              Use a different email
-            </button>
-          </form>
-        )}
+          <button
+            data-testid="login-btn"
+            type="submit"
+            disabled={loading}
+            className="w-full font-body font-semibold text-sm text-white rounded-full py-3 mt-2 flex items-center justify-center gap-2 transition-opacity"
+            style={{ backgroundColor: '#C05621', opacity: loading ? 0.75 : 1 }}
+          >
+            {loading ? <><Spinner /><span>Signing in...</span></> : 'Sign In'}
+          </button>
+        </form>
       </div>
     </div>
   );
