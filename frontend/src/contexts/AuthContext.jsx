@@ -48,7 +48,14 @@ export function AuthProvider({ children }) {
       email,
       options: { shouldCreateUser: true },
     })
-    if (error) throw error
+    if (error) {
+      if (error.message?.toLowerCase().includes('sending confirmation email') ||
+          error.message?.toLowerCase().includes('smtp') ||
+          error.message?.toLowerCase().includes('email')) {
+        throw new Error('Unable to send OTP email. The email service is not configured — ask the admin to set up SMTP in the Supabase dashboard.')
+      }
+      throw error
+    }
   }
 
   // Step 2: verify the 6-digit OTP, then ensure profile exists
