@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, redirect_to } = await req.json()
+    const { email } = await req.json()
     if (!email) {
       return new Response(JSON.stringify({ error: 'Email is required' }), {
         status: 400,
@@ -19,10 +19,9 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     // Check whitelist
     const { data: whitelisted } = await supabase
@@ -38,20 +37,34 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Generate magic link — no email is sent, we redirect to it directly
-    const { data, error } = await supabase.auth.admin.generateLink({
+    // Generate a magic link token (no email sent)
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'magiclink',
       email: email.toLowerCase().trim(),
-      options: {
-        shouldCreateUser: true,
-        redirectTo: redirect_to || undefined,
-      },
+      options: { shouldCreateUser: true },
     })
+    if (linkError) throw linkError
 
-    if (error) throw error
+    // Fetch the verify URL server-side without following the redirect.
+    // Supabase responds with a 303 → Location header contains the tokens in the hash.
+    const verifyUrl = new URL(linkData.properties.action_link)
+    verifyUrl.searchParams.set('redirect_to', 'https://placeholder.invalid')
+
+    const verifyRes = await fetch(verifyUrl.toString(), { redirect: 'manual' })
+    const location = verifyRes.headers.get('location') ?? ''
+
+    // Tokens are in the URL hash: #access_token=...&refresh_token=...
+    const hash = location.includes('#') ? location.split('#')[1] : ''
+    const params = new URLSearchParams(hash)
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+
+    if (!accessToken || !refreshToken) {
+      throw new Error('Could not retrieve session from auth server. Check Supabase Site URL / Redirect URL settings.')
+    }
 
     return new Response(
-      JSON.stringify({ action_link: data.properties.action_link }),
+      JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
