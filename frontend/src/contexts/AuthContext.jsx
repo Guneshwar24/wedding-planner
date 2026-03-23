@@ -37,17 +37,20 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }
 
-  // Enter email → instantly signed in (no OTP, no password)
+  // Enter email → instantly signed in (no OTP, no redirect, no PKCE)
   async function loginWithEmail(email) {
     const { data, error: fnError } = await supabase.functions.invoke('instant-login', {
-      body: { email, redirect_to: window.location.origin },
+      body: { email },
     })
     if (fnError) throw fnError
     if (data?.error) throw new Error(data.error)
 
-    // Navigate to the magic link — Supabase verifies it server-side and
-    // redirects back to the app with an active session in the URL
-    window.location.href = data.action_link
+    // Edge function exchanged the token server-side; just set the session directly
+    const { error } = await supabase.auth.setSession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    })
+    if (error) throw error
   }
 
   async function logout() {
