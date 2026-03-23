@@ -14,6 +14,8 @@ create table if not exists profiles (
 alter table profiles add column if not exists is_admin boolean default false;
 alter table tasks add column if not exists subtasks jsonb default '[]'::jsonb;
 alter table family_members add column if not exists email text;
+alter table whitelisted_emails add column if not exists login_token text default encode(gen_random_bytes(32), 'hex');
+update whitelisted_emails set login_token = encode(gen_random_bytes(32), 'hex') where login_token is null;
 
 create table if not exists whitelisted_emails (
   email text primary key,

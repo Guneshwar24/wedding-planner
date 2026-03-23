@@ -45,10 +45,11 @@ export function AuthProvider({ children }) {
     if (fnError) throw fnError
     if (data?.error) throw new Error(data.error)
 
-    // Edge function exchanged the token server-side; just set the session directly
-    const { error } = await supabase.auth.setSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
+    // Edge function ensured the auth user exists with a stable password.
+    // Sign in with that password — no redirects, no PKCE, just works.
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: data.login_token,
     })
     if (error) throw error
   }

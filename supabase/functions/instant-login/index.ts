@@ -19,25 +19,27 @@ Deno.serve(async (req) => {
       })
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
 
-    // Check whitelist
-    const { data: whitelisted } = await supabase
+    // Check whitelist and get this user's stable login token
+    const { data: wl } = await supabase
       .from('whitelisted_emails')
-      .select('email')
+      .select('email, login_token')
       .eq('email', email.toLowerCase().trim())
       .maybeSingle()
 
-    if (!whitelisted) {
+    if (!wl) {
       return new Response(
         JSON.stringify({ error: 'This email is not authorised. Contact the admin to get access.' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    // Generate a magic link token (no email sent)
+    // Ensure the auth user exists and their password matches the login_token.
+    // generateLink(shouldCreateUser:true) creates the user if missing and returns their ID.
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'magiclink',
       email: email.toLowerCase().trim(),
@@ -45,26 +47,16 @@ Deno.serve(async (req) => {
     })
     if (linkError) throw linkError
 
-    // Fetch the verify URL server-side without following the redirect.
-    // Supabase responds with a 303 → Location header contains the tokens in the hash.
-    const verifyUrl = new URL(linkData.properties.action_link)
-    verifyUrl.searchParams.set('redirect_to', 'https://placeholder.invalid')
-
-    const verifyRes = await fetch(verifyUrl.toString(), { redirect: 'manual' })
-    const location = verifyRes.headers.get('location') ?? ''
-
-    // Tokens are in the URL hash: #access_token=...&refresh_token=...
-    const hash = location.includes('#') ? location.split('#')[1] : ''
-    const params = new URLSearchParams(hash)
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token')
-
-    if (!accessToken || !refreshToken) {
-      throw new Error('Could not retrieve session from auth server. Check Supabase Site URL / Redirect URL settings.')
-    }
+    // Set (or reset) the user's password to their stable login_token.
+    // This is safe — the token is random, long, and never shown to the user.
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      linkData.user.id,
+      { password: wl.login_token, email_confirm: true },
+    )
+    if (updateError) throw updateError
 
     return new Response(
-      JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+      JSON.stringify({ login_token: wl.login_token }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
